@@ -646,17 +646,13 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         output_folder, output_file = os.path.split(output_path)
         movie_name = os.path.splitext(output_file)[0]
 
+        # 파일명 내 '.'을 '_'로 치환하여 Unreal이 생성하는 파일명 패턴과 일치시키기
+        movie_name = movie_name.replace('.', '_')
+
         engine_root = unreal.Paths.engine_dir()
         editor_cmd_path = os.path.join(engine_root, "Binaries", "Win64", "UnrealEditor-Cmd.exe")
         if not os.path.isfile(editor_cmd_path):
             editor_cmd_path = os.path.join(engine_root, "Binaries", "Win64", "UnrealEditor.exe")
-
-        # start_frame, end_frame 정보 가져오기
-        start_frame = self.parent.logical_parent_task.properties.get("start_frame", 0)
-        end_frame = self.parent.logical_parent_task.properties.get("end_frame", 0)
-        # 또는 item.properties에서 직접 가져올 수도 있음
-        # start_frame = item.properties.get("start_frame", 0)
-        # end_frame = item.properties.get("end_frame", 0)
 
         cmdline_args = [
             editor_cmd_path,
@@ -682,12 +678,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             "-NoTextureStreaming",
             "-NoLoadingScreen",
             "-NoScreenMessages",
-            # 여기서 추출한 start_frame, end_frame 반영
-            "-MovieStartFrame=%d" % start_frame,
-            "-MovieEndFrame=%d" % end_frame,
         ]
-
-        unreal.log("Sequencer command-line arguments: {}".format(" ".join(cmdline_args)))
 
         run_env = copy.copy(os.environ)
         if "UE_SHOTGUN_BOOTSTRAP" in run_env:
