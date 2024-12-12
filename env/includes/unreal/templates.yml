@@ -31,6 +31,7 @@ keys:
         choices:
             mov: Quicktime Movie (.mov)
             avi: Audio Video Interleaved (.avi)
+            exr: OpenEXR (.exr)
 
 paths:
  #

@@ -360,41 +360,13 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         }
 
     def validate(self, settings, item):
-        """
-        Validates the given item to check that it is ok to publish. Returns a
-        boolean to indicate validity.
-
-        :param settings: Dictionary of Settings. The keys are strings, matching
-            the keys returned in the settings property. The values are `Setting`
-            instances.
-        :param item: Item to process
-        :returns: True if item is valid, False otherwise.
-        """
-        # raise an exception here if something is not valid.
-        # If you use the logger, warnings will appear in the validation tree.
-        # You can attach callbacks that allow users to fix these warnings
-        # at the press of a button.
-        #
-        # For example:
-        #
-        # self.logger.info(
-        #         "Your session is not part of a maya project.",
-        #         extra={
-        #             "action_button": {
-        #                 "label": "Set Project",
-        #                 "tooltip": "Set the maya project",
-        #                 "callback": lambda: mel.eval('setProject ""')
-        #             }
-        #         }
-        #     )
-
+        # 원래 validate 내용 중 AVI/MOV 설정 부분을 제거하고 exr으로 설정
+        # EXR 시퀀스 렌더를 위해 ue_mov_ext를 exr로 지정
         asset_path = item.properties.get("asset_path")
         asset_name = item.properties.get("asset_name")
         if not asset_path or not asset_name:
             self.logger.debug("Sequence path or name not configured.")
             return False
-        # Retrieve the Level Sequences sections tree for this Level Sequence.
-        # This is needed to get frame ranges in the "edit" context.
         edits_path = item.properties.get("edits_path")
         if not edits_path:
             self.logger.debug("Edits path not configured.")
@@ -407,106 +379,69 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             item.properties["unreal_master_sequence"].get_name(),
             item.properties["unreal_shot"] or "all shots",
         ))
-        # Get the configured publish template
+
         publish_template = item.properties["publish_template"]
-
-        # Get the context from the Publisher UI
         context = item.context
-        unreal.log("context: {}".format(context))
-
-        # Query the fields needed for the publish template from the context
         try:
             fields = context.as_template_fields(publish_template)
         except Exception:
-            # We likely failed because of folder creation, trigger that
             self.parent.sgtk.create_filesystem_structure(
                 context.entity["type"],
                 context.entity["id"],
                 self.parent.engine.instance_name
             )
-            # In theory, this should now work because we've created folders and
-            # updated the path cache
             fields = item.context.as_template_fields(publish_template)
-        unreal.log("context fields: {}".format(fields))
 
-        # Ensure that the current map is saved on disk
         unreal_map = unreal.EditorLevelLibrary.get_editor_world()
         unreal_map_path = unreal_map.get_path_name()
-
-        # Transient maps are not supported, must be saved on disk
         if unreal_map_path.startswith("/Temp/"):
             self.logger.debug("Current map must be saved first.")
             return False
 
-        # Add the map name to fields
         world_name = unreal_map.get_name()
-        # Add the Level Sequence to fields, with the shot if any
         fields["ue_world"] = world_name
         if len(edits_path) > 1:
             fields["ue_level_sequence"] = "%s_%s" % (edits_path[0].get_name(), edits_path[-1].get_name())
         else:
             fields["ue_level_sequence"] = edits_path[0].get_name()
 
-        # Stash the level sequence and map paths in properties for the render
         item.properties["unreal_asset_path"] = asset_path
         item.properties["unreal_map_path"] = unreal_map_path
-
-        # Add a version number to the fields, incremented from the current asset version
-        version_number = self._unreal_asset_get_version(asset_path)
-        version_number = version_number + 1
+        version_number = self._unreal_asset_get_version(asset_path) + 1
         fields["version"] = version_number
-
-        # Add today's date to the fields
         date = datetime.date.today()
         fields["YYYY"] = date.year
         fields["MM"] = date.month
         fields["DD"] = date.day
 
-        # Check if we can use the Movie Render queue available from 4.26
+        # EXR 시퀀스를 사용하기 위해 ue_mov_ext를 exr로 설정
+        fields["ue_mov_ext"] = "exr"  
+
+        # Movie Render Queue 사용 여부 체크
         use_movie_render_queue = False
         render_presets = None
         if hasattr(unreal, "MoviePipelineQueueEngineSubsystem"):
-            if hasattr(unreal, "MoviePipelineAppleProResOutput"):
-                use_movie_render_queue = True
-                self.logger.info("Movie Render Queue will be used for rendering.")
-                render_presets_path = settings["Movie Render Queue Presets Path"].value
-                if render_presets_path:
-                    self.logger.info("Validating render presets path %s" % render_presets_path)
-                    render_presets = unreal.EditorAssetLibrary.load_asset(render_presets_path)
-                    for _, reason in self._check_render_settings(render_presets):
-                        self.logger.warning(reason)
-            else:
-                self.logger.info(
-                    "Apple ProRes Media plugin must be loaded to be able to render with the Movie Render Queue, "
-                    "Level Sequencer will be used for rendering."
-                )
-
-        if not use_movie_render_queue:
-            if item.properties["unreal_shot"]:
-                raise ValueError("Rendering invidual shots for a sequence is only supported with the Movie Render Queue.")
-            self.logger.info("Movie Render Queue not available, Level Sequencer will be used for rendering.")
+            # AppleProRes 필요 없어지고, EXR 이미지 시퀀스로 간다.
+            use_movie_render_queue = True
+            self.logger.info("Movie Render Queue will be used for rendering.")
+            render_presets_path = settings["Movie Render Queue Presets Path"].value
+            if render_presets_path:
+                self.logger.info("Validating render presets path %s" % render_presets_path)
+                render_presets = unreal.EditorAssetLibrary.load_asset(render_presets_path)
+                for _, reason in self._check_render_settings(render_presets):
+                    self.logger.warning(reason)
 
         item.properties["use_movie_render_queue"] = use_movie_render_queue
         item.properties["movie_render_queue_presets"] = render_presets
-        # Set the UE movie extension based on the current platform and rendering engine
-        if use_movie_render_queue:
-            fields["ue_mov_ext"] = "mov"  # mov on all platforms
-        else:
-            if sys.platform == "win32":
-                fields["ue_mov_ext"] = "avi"
-            else:
-                fields["ue_mov_ext"] = "mov"
-        # Ensure the fields work for the publish template
+
         missing_keys = publish_template.missing_keys(fields)
         if missing_keys:
-            error_msg = "Missing keys required for the publish template " \
-                        "%s" % (missing_keys)
+            error_msg = "Missing keys required for the publish template %s" % (missing_keys)
             self.logger.error(error_msg)
             raise ValueError(error_msg)
 
         publish_path = publish_template.apply_fields(fields)
         if not os.path.isabs(publish_path):
-            # If the path is not absolute, prepend the publish folder setting.
             publish_folder = settings["Publish Folder"].value
             if not publish_folder:
                 publish_folder = unreal.Paths.project_saved_dir()
@@ -518,7 +453,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             )
         item.properties["path"] = publish_path
         item.properties["publish_path"] = publish_path
-        item.properties["publish_type"] = "Unreal Render"
+        # EXR 시퀀스이므로 유형을 이미지 시퀀스로 간주
+        item.properties["publish_type"] = "Rendered Image Sequence"
         item.properties["version_number"] = version_number
         self.save_ui_settings(settings)
         return True
@@ -543,122 +479,91 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         return invalid_settings
 
     def publish(self, settings, item):
-        """
-        Executes the publish logic for the given item and settings.
-
-        :param settings: Dictionary of Settings. The keys are strings, matching
-            the keys returned in the settings property. The values are `Setting`
-            instances.
-        :param item: Item to process
-        """
-
-        # This is where you insert custom information into `item`, like the
-        # path of the file being published or any dependency this publish
-        # has on other publishes.
-
-        # get the path in a normalized state. no trailing separator, separators
-        # are appropriate for current os, no double separators, etc.
-
-        # let the base class register the publish
-
         publish_path = os.path.normpath(item.properties["publish_path"])
+        destination_folder, base_name = os.path.split(publish_path)
+        base_name = os.path.splitext(base_name)[0]
 
-        # Split the destination path into folder and filename
-        destination_folder, movie_name = os.path.split(publish_path)
-        movie_name = os.path.splitext(movie_name)[0]
-
-        # Ensure that the destination path exists before rendering the sequence
-        self.parent.ensure_folder_exists(destination_folder)
-
-        # Get the level sequence and map paths again
-        unreal_asset_path = item.properties["unreal_asset_path"]
-        unreal_map_path = item.properties["unreal_map_path"]
-        unreal.log("movie name: {}".format(movie_name))
-        # Render the movie
+        # EXR 시퀀스 렌더를 위해 아래 렌더 메소드 호출 후 결과 체크
         if item.properties.get("use_movie_render_queue"):
             presets = item.properties["movie_render_queue_presets"]
             if presets:
                 self.logger.info("Rendering %s with the Movie Render Queue with %s presets." % (publish_path, presets.get_name()))
             else:
                 self.logger.info("Rendering %s with the Movie Render Queue." % publish_path)
-            res, _ = self._unreal_render_sequence_with_movie_queue(
+            res, output_dir = self._unreal_render_sequence_with_movie_queue(
                 publish_path,
-                unreal_map_path,
-                unreal_asset_path,
+                item.properties["unreal_map_path"],
+                item.properties["unreal_asset_path"],
                 presets,
                 item.properties.get("unreal_shot") or None,
             )
         else:
             self.logger.info("Rendering %s with the Level Sequencer." % publish_path)
-            res, _ = self._unreal_render_sequence_with_sequencer(
+            res, output_dir = self._unreal_render_sequence_with_sequencer(
                 publish_path,
-                unreal_map_path,
-                unreal_asset_path
+                item.properties["unreal_map_path"],
+                item.properties["unreal_asset_path"]
             )
-        if not res:
-            raise RuntimeError(
-                "Unable to render %s" % publish_path
-            )
-        # Increment the version number
-        self._unreal_asset_set_version(unreal_asset_path, item.properties["version_number"])
 
-        # Publish the movie file to Shotgun
+        if not res:
+            raise RuntimeError("Unable to render EXR sequence at %s" % publish_path)
+
+        # 버전 정보 갱신
+        self._unreal_asset_set_version(item.properties["unreal_asset_path"], item.properties["version_number"])
+
+        # 출력된 EXR 파일들 리스트업
+        exr_pattern = os.path.join(output_dir, base_name + "*.exr")
+        frames = sorted([f for f in glob.glob(exr_pattern) if os.path.isfile(f)])
+        if not frames:
+            raise RuntimeError("No EXR frames found after rendering.")
+
+        # 첫 프레임을 대표 파일로 지정
+        representative_frame = frames[0]
+
+        # Publish: EXR 시퀀스를 퍼블리시(이미지 시퀀스 타입)
+        item.properties["path"] = output_dir  # 전체 디렉토리 퍼블리시
+        item.properties["publish_path"] = output_dir
         super(UnrealMoviePublishPlugin, self).publish(settings, item)
 
-        # Create a Version entry linked with the new publish
-        # Populate the version data to send to SG
+        # Version 생성
         self.logger.info("Creating Version...")
         version_data = {
             "project": item.context.project,
-            "code": movie_name,
+            "code": base_name,
             "description": item.description,
             "entity": self._get_version_entity(item),
-            "sg_path_to_movie": publish_path,
-            "sg_task": item.context.task
+            "sg_task": item.context.task,
+            "sg_path_to_frames": output_dir,
         }
 
         publish_data = item.properties.get("sg_publish_data")
-
-        # If the file was published, add the publish data to the version
         if publish_data:
             version_data["published_files"] = [publish_data]
 
-        # Log the version data for debugging
         self.logger.debug(
             "Populated Version data...",
             extra={
                 "action_show_more_info": {
                     "label": "Version Data",
                     "tooltip": "Show the complete Version data dictionary",
-                    "text": "<pre>%s</pre>" % (
-                        pprint.pformat(version_data),
-                    )
+                    "text": "<pre>%s</pre>" % (pprint.pformat(version_data))
                 }
             }
         )
 
-        # Create the version
         self.logger.info("Creating version for review...")
         version = self.parent.shotgun.create("Version", version_data)
-
-        # Stash the version info in the item just in case
         item.properties["sg_version_data"] = version
 
-        # On windows, ensure the path is utf-8 encoded to avoid issues with
-        # the shotgun api
-        upload_path = str(item.properties.get("publish_path"))
-        unreal.log("upload_path: {}".format(upload_path))
-
-        # Upload the file to SG
-        self.logger.info("Uploading content...")
+        # 첫 프레임을 Version에 업로드 (WebReview는 MOV/MP4 지원하나 여기서는 단순 업로드로 처리)
+        self.logger.info("Uploading first frame...")
         self.parent.shotgun.upload(
             "Version",
             version["id"],
-            upload_path,
+            representative_frame,
             "sg_uploaded_movie"
         )
         self.logger.info("Upload complete!")
-
     def finalize(self, settings, item):
         """
         Execute the finalization pass. This pass executes once all the publish
@@ -724,44 +629,23 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             dialog.raise_()
 
     def _unreal_render_sequence_with_sequencer(self, output_path, unreal_map_path, sequence_path):
-        """
-        Renders a given sequence in a given level to a movie file with the Level Sequencer.
-
-        :param str output_path: Full path to the movie to render.
-        :param str unreal_map_path: Path of the Unreal map in which to run the sequence.
-        :param str sequence_path: Content Browser path of sequence to render.
-        :returns: True if a movie file was generated, False otherwise
-                  string representing the path of the generated movie file
-        """
         output_folder, output_file = os.path.split(output_path)
         movie_name = os.path.splitext(output_file)[0]
 
-        # First, check if there's a file that will interfere with the output of the Sequencer
-        # Sequencer can only render to avi or mov file format
-        if os.path.isfile(output_path):
-            # Must delete it first, otherwise the Sequencer will add a number in the filename
-            try:
-                os.remove(output_path)
-            except OSError:
-                self.logger.error(
-                    "Couldn't delete {}. The Sequencer won't be able to output the movie to that file.".format(output_path)
-                )
-                return False, None
-
-        # Render the sequence to a movie file using the following command-line arguments
+        # EXR 시퀀스를 생성하기 위해 MovieFormat, Extension을 이미지로 지정
+        # -MovieFormat=Image -MovieExtension=exr
+        # Sequencer는 프레임 단위로 EXR 파일을 생성할 것이며,
+        # movie_name_0000.exr 형태로 파일들이 생성됨.
         cmdline_args = [
-            sys.executable,  # Unreal executable path
+            sys.executable,
             "%s" % os.path.join(
                 unreal.SystemLibrary.get_project_directory(),
                 "%s.uproject" % unreal.SystemLibrary.get_game_name(),
-            ),  # Unreal project
-            unreal_map_path,  # Level to load for rendering the sequence
-            # Command-line arguments for Sequencer Render to Movie
-            # See: https://docs.unrealengine.com/en-us/Engine/Sequencer/Workflow/RenderingCmdLine
-            #
-            "-LevelSequence=%s" % sequence_path,  # The sequence to render
-            "-MovieFolder=%s" % output_folder,  # Output folder, must match the work template
-            "-MovieName=%s" % movie_name,  # Output filename
+            ),
+            unreal_map_path,
+            "-LevelSequence=%s" % sequence_path,
+            "-MovieFolder=%s" % output_folder,
+            "-MovieName=%s" % movie_name,
             "-game",
             "-MovieSceneCaptureType=/Script/MovieSceneCapture.AutomatedLevelSequenceCapture",
             "-ResX=1280",
@@ -769,7 +653,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             "-ForceRes",
             "-Windowed",
             "-MovieCinematicMode=yes",
-            "-MovieFormat=Video",
+            "-MovieFormat=Image",            # 이미지 시퀀스 출력
+            "-MovieExtension=exr",           # EXR 확장자
             "-MovieFrameRate=24",
             "-MovieQuality=75",
             "-NoTextureStreaming",
@@ -777,15 +662,9 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             "-NoScreenMessages",
         ]
 
-        unreal.log(
-            "Sequencer command-line arguments: {}".format(
-                " ".join(cmdline_args)
-            )
-        )
+        unreal.log("Sequencer command-line arguments: {}".format(" ".join(cmdline_args)))
 
-        # Make a shallow copy of the current environment and clear some variables
         run_env = copy.copy(os.environ)
-        # Prevent SG TK to try to bootstrap in the new process
         if "UE_SHOTGUN_BOOTSTRAP" in run_env:
             del run_env["UE_SHOTGUN_BOOTSTRAP"]
         if "UE_SHOTGRID_BOOTSTRAP" in run_env:
@@ -793,7 +672,10 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         subprocess.call(cmdline_args, env=run_env)
 
-        return os.path.isfile(output_path), output_path
+        # EXR 시퀀스가 생성되었는지 확인하기 위해 프레임 하나라도 있는지 체크
+        pattern = os.path.join(output_folder, movie_name + "*.exr")
+        frames = sorted([f for f in glob.glob(pattern) if os.path.isfile(f)])
+        return (len(frames) > 0), output_folder
 
     def _unreal_render_sequence_with_movie_queue(self, output_path, unreal_map_path, sequence_path, presets=None, shot_name=None):
         """
