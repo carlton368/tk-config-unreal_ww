@@ -680,6 +680,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
     def _unreal_render_sequence_with_movie_queue(self, output_path, unreal_map_path, sequence_path, presets=None, shot_name=None):
         output_folder, output_file = os.path.split(output_path)
         movie_name = os.path.splitext(output_file)[0]
+        movie_name = movie_name.replace('.', '_')
 
         qsub = unreal.MoviePipelineQueueEngineSubsystem()
         queue = qsub.get_queue()
@@ -696,9 +697,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                 else:
                     shot_found = True
             if not shot_found:
-                raise ValueError(
-                    "Unable to find shot %s in sequence %s, aborting..." % (shot_name, sequence_path)
-                )
+                raise ValueError("Unable to find shot %s in sequence %s, aborting..." % (shot_name, sequence_path))
 
         if presets:
             job.set_preset_origin(presets)
@@ -710,15 +709,10 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         output_setting.file_name_format = movie_name
         output_setting.override_existing_output = True
 
-        # 기존 AppleProResOutput 부분 제거
-        # config.find_or_add_setting_by_class(unreal.MoviePipelineAppleProResOutput)  <-- 제거
-
-        # 불필요하거나 문제를 일으킬 수 있는 다른 셋팅 제거
         for setting, reason in self._check_render_settings(config):
             self.logger.warning("Disabling %s: %s." % (setting.get_name(), reason))
             config.remove_setting(setting)
 
-        # 기본 DefferedPass 및 EXR 시퀀스 출력 세팅
         config.find_or_add_setting_by_class(unreal.MoviePipelineDeferredPassBase)
         config.find_or_add_setting_by_class(unreal.MoviePipelineImageSequenceOutput_EXR)
 
@@ -741,10 +735,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         cmd_args = [
             sys.executable,
-            "%s" % os.path.join(
-                unreal.SystemLibrary.get_project_directory(),
-                "%s.uproject" % unreal.SystemLibrary.get_game_name(),
-            ),
+            "%s" % os.path.join(unreal.SystemLibrary.get_project_directory(), "%s.uproject" % unreal.SystemLibrary.get_game_name()),
             "MoviePipelineEntryMap?game=/Script/MovieRenderPipelineCore.MoviePipelineGameMode",
             "-game",
             "-Multiprocess",
@@ -793,6 +784,6 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         self.logger.info("Running %s" % cmd_args)
         subprocess.call(cmd_args, env=run_env)
 
-        pattern = os.path.join(output_folder, movie_name + "*.exr")
+        pattern = os.path.join(output_folder, movie_name + "_*.exr")
         frames = sorted([f for f in glob.glob(pattern) if os.path.isfile(f)])
         return (len(frames) > 0), output_folder
