@@ -433,19 +433,21 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         item.properties["use_movie_render_queue"] = use_movie_render_queue
         item.properties["movie_render_queue_presets"] = render_presets
-        # 레벨 시퀀스에서 프레임 범위 가져오기 (추가된 코드)
+        # 레벨 시퀀스에서 프레임 범위 가져오기
         sequence = unreal.EditorAssetLibrary.load_asset(asset_path)
         if isinstance(sequence, unreal.LevelSequence):
-            start_tick, end_tick = sequence.get_playback_range()
+            playback_range = sequence.get_playback_range()
             fps = sequence.get_display_rate()
-            start_frame = int(start_tick / fps.denominator)
-            end_frame = int(end_tick / fps.denominator - 1)
+            # playback_range.start_frame, playback_range.end_frame는 FrameNumber 객체 반환
+            start_frame = playback_range.start_frame.value
+            end_frame = playback_range.end_frame.value - 1
+
             item.properties["start_frame"] = start_frame
             item.properties["end_frame"] = end_frame
             item.properties["frame_rate"] = fps.numerator
             self.logger.info("Sequence frame range: %d to %d at %d fps" % (start_frame, end_frame, fps.numerator))
 
-            # 여기서 SEQ 키를 레벨 시퀀스의 시작 프레임 값으로 할당 (추가된 코드)
+            # SEQ 필드에 start_frame 할당
             fields["SEQ"] = start_frame
         missing_keys = publish_template.missing_keys(fields)
         if missing_keys:
