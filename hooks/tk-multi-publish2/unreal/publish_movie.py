@@ -646,15 +646,20 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         output_folder, output_file = os.path.split(output_path)
         movie_name = os.path.splitext(output_file)[0]
 
-        # Unreal Editor 실행 파일 경로 획득 (메서드 추가/변경 금지이므로 여기서 직접 작성)
         engine_root = unreal.Paths.engine_dir()
         editor_cmd_path = os.path.join(engine_root, "Binaries", "Win64", "UnrealEditor-Cmd.exe")
         if not os.path.isfile(editor_cmd_path):
-            # Cmd 버전이 없으면 UnrealEditor.exe 사용
             editor_cmd_path = os.path.join(engine_root, "Binaries", "Win64", "UnrealEditor.exe")
 
+        # start_frame, end_frame 정보 가져오기
+        start_frame = self.parent.logical_parent_task.properties.get("start_frame", 0)
+        end_frame = self.parent.logical_parent_task.properties.get("end_frame", 0)
+        # 또는 item.properties에서 직접 가져올 수도 있음
+        # start_frame = item.properties.get("start_frame", 0)
+        # end_frame = item.properties.get("end_frame", 0)
+
         cmdline_args = [
-            editor_cmd_path,  # sys.executable 대신 Unreal Editor 실행 파일
+            editor_cmd_path,
             "%s" % os.path.join(
                 unreal.SystemLibrary.get_project_directory(),
                 "%s.uproject" % unreal.SystemLibrary.get_game_name(),
@@ -677,6 +682,9 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             "-NoTextureStreaming",
             "-NoLoadingScreen",
             "-NoScreenMessages",
+            # 여기서 추출한 start_frame, end_frame 반영
+            "-MovieStartFrame=%d" % start_frame,
+            "-MovieEndFrame=%d" % end_frame,
         ]
 
         unreal.log("Sequencer command-line arguments: {}".format(" ".join(cmdline_args)))
