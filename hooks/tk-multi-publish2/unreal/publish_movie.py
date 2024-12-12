@@ -646,12 +646,15 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         output_folder, output_file = os.path.split(output_path)
         movie_name = os.path.splitext(output_file)[0]
 
-        # EXR 시퀀스를 생성하기 위해 MovieFormat, Extension을 이미지로 지정
-        # -MovieFormat=Image -MovieExtension=exr
-        # Sequencer는 프레임 단위로 EXR 파일을 생성할 것이며,
-        # movie_name_0000.exr 형태로 파일들이 생성됨.
+        # Unreal Editor 실행 파일 경로 획득 (메서드 추가/변경 금지이므로 여기서 직접 작성)
+        engine_root = unreal.Paths.engine_dir()
+        editor_cmd_path = os.path.join(engine_root, "Binaries", "Win64", "UnrealEditor-Cmd.exe")
+        if not os.path.isfile(editor_cmd_path):
+            # Cmd 버전이 없으면 UnrealEditor.exe 사용
+            editor_cmd_path = os.path.join(engine_root, "Binaries", "Win64", "UnrealEditor.exe")
+
         cmdline_args = [
-            sys.executable,
+            editor_cmd_path,  # sys.executable 대신 Unreal Editor 실행 파일
             "%s" % os.path.join(
                 unreal.SystemLibrary.get_project_directory(),
                 "%s.uproject" % unreal.SystemLibrary.get_game_name(),
@@ -667,8 +670,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             "-ForceRes",
             "-Windowed",
             "-MovieCinematicMode=yes",
-            "-MovieFormat=Image",            # 이미지 시퀀스 출력
-            "-MovieExtension=exr",           # EXR 확장자
+            "-MovieFormat=Image",
+            "-MovieExtension=exr",
             "-MovieFrameRate=24",
             "-MovieQuality=75",
             "-NoTextureStreaming",
@@ -686,7 +689,6 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         subprocess.call(cmdline_args, env=run_env)
 
-        # EXR 시퀀스가 생성되었는지 확인하기 위해 프레임 하나라도 있는지 체크
         pattern = os.path.join(output_folder, movie_name + "*.exr")
         frames = sorted([f for f in glob.glob(pattern) if os.path.isfile(f)])
         return (len(frames) > 0), output_folder
@@ -695,6 +697,12 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         output_folder, output_file = os.path.split(output_path)
         movie_name = os.path.splitext(output_file)[0]
         movie_name = movie_name.replace('.', '_')
+
+        # 동일하게 Unreal Editor 실행 파일 경로 지정
+        engine_root = unreal.Paths.engine_dir()
+        editor_cmd_path = os.path.join(engine_root, "Binaries", "Win64", "UnrealEditor-Cmd.exe")
+        if not os.path.isfile(editor_cmd_path):
+            editor_cmd_path = os.path.join(engine_root, "Binaries", "Win64", "UnrealEditor.exe")
 
         qsub = unreal.MoviePipelineQueueEngineSubsystem()
         queue = qsub.get_queue()
@@ -748,8 +756,11 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         )
 
         cmd_args = [
-            sys.executable,
-            "%s" % os.path.join(unreal.SystemLibrary.get_project_directory(), "%s.uproject" % unreal.SystemLibrary.get_game_name()),
+            editor_cmd_path,  # sys.executable 대신 Unreal Editor 실행 파일
+            "%s" % os.path.join(
+                unreal.SystemLibrary.get_project_directory(),
+                "%s.uproject" % unreal.SystemLibrary.get_game_name(),
+            ),
             "MoviePipelineEntryMap?game=/Script/MovieRenderPipelineCore.MoviePipelineGameMode",
             "-game",
             "-Multiprocess",
@@ -801,3 +812,4 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         pattern = os.path.join(output_folder, movie_name + "_*.exr")
         frames = sorted([f for f in glob.glob(pattern) if os.path.isfile(f)])
         return (len(frames) > 0), output_folder
+
