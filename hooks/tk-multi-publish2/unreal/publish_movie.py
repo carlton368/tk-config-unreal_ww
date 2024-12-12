@@ -678,19 +678,6 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         return (len(frames) > 0), output_folder
 
     def _unreal_render_sequence_with_movie_queue(self, output_path, unreal_map_path, sequence_path, presets=None, shot_name=None):
-        """
-        Renders a given sequence in a given level with the Movie Render queue.
-
-        :param str output_path: Full path to the movie to render.
-        :param str unreal_map_path: Path of the Unreal map in which to run the sequence.
-        :param str sequence_path: Content Browser path of sequence to render.
-        :param presets: Optional :class:`unreal.MoviePipelineMasterConfig` instance to use for renderig.
-        :param str shot_name: Optional shot name to render a single shot from this sequence.
-        :returns: True if a movie file was generated, False otherwise
-                  string representing the path of the generated movie file
-        :raises ValueError: If a shot name is specified but can't be found in
-                            the sequence.
-        """
         output_folder, output_file = os.path.split(output_path)
         movie_name = os.path.splitext(output_file)[0]
 
@@ -699,7 +686,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         job = queue.allocate_new_job(unreal.MoviePipelineExecutorJob)
         job.sequence = unreal.SoftObjectPath(sequence_path)
         job.map = unreal.SoftObjectPath(unreal_map_path)
-        # If a specific shot was given, disable all the others.
+
         if shot_name:
             shot_found = False
             for shot in job.shot_info:
@@ -712,59 +699,36 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                 raise ValueError(
                     "Unable to find shot %s in sequence %s, aborting..." % (shot_name, sequence_path)
                 )
-        # Set settings from presets, if any
+
         if presets:
             job.set_preset_origin(presets)
-        # Ensure the settings we need are set.
+
         config = job.get_configuration()
-        # https://docs.unrealengine.com/4.26/en-US/PythonAPI/class/MoviePipelineOutputSetting.html?highlight=setting#unreal.MoviePipelineOutputSetting
         output_setting = config.find_or_add_setting_by_class(unreal.MoviePipelineOutputSetting)
         output_setting.output_directory = unreal.DirectoryPath(output_folder)
         output_setting.output_resolution = unreal.IntPoint(1280, 720)
         output_setting.file_name_format = movie_name
-        output_setting.override_existing_output = True  # Overwrite existing files
-        # If needed we could enforce a frame rate, like for the Sequencer code.
-        # output_setting.output_frame_rate = unreal.FrameRate(24)
-        # output_setting.use_custom_frame_rate = True
-        # Remove problematic settings
+        output_setting.override_existing_output = True
+
+        # 기존 AppleProResOutput 부분 제거
+        # config.find_or_add_setting_by_class(unreal.MoviePipelineAppleProResOutput)  <-- 제거
+
+        # 불필요하거나 문제를 일으킬 수 있는 다른 셋팅 제거
         for setting, reason in self._check_render_settings(config):
             self.logger.warning("Disabling %s: %s." % (setting.get_name(), reason))
             config.remove_setting(setting)
 
-        # Default rendering
+        # 기본 DefferedPass 및 EXR 시퀀스 출력 세팅
         config.find_or_add_setting_by_class(unreal.MoviePipelineDeferredPassBase)
-        # Render to a movie
-        config.find_or_add_setting_by_class(unreal.MoviePipelineAppleProResOutput)
-        # TODO: check which codec we should use.
+        config.find_or_add_setting_by_class(unreal.MoviePipelineImageSequenceOutput_EXR)
 
-        # We render in a forked process that we can control.
-        # It would be possible to render in from the running process using an
-        # Executor, however it seems to sometimes deadlock if we don't let Unreal
-        # process its internal events, rendering is asynchronous and being notified
-        # when the render completed does not seem to be reliable.
-        # Sample code:
-        #    exc = unreal.MoviePipelinePIEExecutor()
-        #    # If needed, we can store data in exc.user_data
-        #    # In theory we can set a callback to be notified about completion
-        #    def _on_movie_render_finished_cb(executor, result):
-        #       print("Executor %s finished with %s" % (executor, result))
-        #    # exc.on_executor_finished_delegate.add_callable(_on_movie_render_finished_cb)
-        #    r = qsub.render_queue_with_executor_instance(exc)
-
-        # We can't control the name of the manifest file, so we save and then rename the file.
         _, manifest_path = unreal.MoviePipelineEditorLibrary.save_queue_to_manifest_file(queue)
-
         manifest_path = os.path.abspath(manifest_path)
         manifest_dir, manifest_file = os.path.split(manifest_path)
-        f, new_path = tempfile.mkstemp(
-            suffix=os.path.splitext(manifest_file)[1],
-            dir=manifest_dir
-        )
+        f, new_path = tempfile.mkstemp(suffix=os.path.splitext(manifest_file)[1], dir=manifest_dir)
         os.close(f)
         os.replace(manifest_path, new_path)
-
         self.logger.debug("Queue manifest saved in %s" % new_path)
-        # We now need a path local to the unreal project "Saved" folder.
         manifest_path = new_path.replace(
             "%s%s" % (
                 os.path.abspath(
@@ -774,10 +738,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             ),
             "",
         )
-        self.logger.debug("Manifest short path: %s" % manifest_path)
-        # Command line parameters were retrieved by submitting a queue in Unreal Editor with
-        # a MoviePipelineNewProcessExecutor executor.
-        # https://docs.unrealengine.com/4.27/en-US/PythonAPI/class/MoviePipelineNewProcessExecutor.html?highlight=executor
+
         cmd_args = [
             sys.executable,
             "%s" % os.path.join(
@@ -797,7 +758,6 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             "-windowed",
             "-ResX=1280",
             "-ResY=720",
-            # TODO: check what these settings are
             "-dpcvars=%s" % ",".join([
                 "sg.ViewDistanceQuality=4",
                 "sg.AntiAliasingQuality=4",
@@ -821,21 +781,18 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                 "a.URO.Enable=0",
             ]),
             "-execcmds=r.HLOD 0",
-            # This need to be a path relative the to the Unreal project "Saved" folder.
             "-MoviePipelineConfig=\"%s\"" % manifest_path,
         ]
-        unreal.log(
-            "Movie Queue command-line arguments: {}".format(
-                " ".join(cmd_args)
-            )
-        )
-        # Make a shallow copy of the current environment and clear some variables
+
+        unreal.log("Movie Queue command-line arguments: {}".format(" ".join(cmd_args)))
         run_env = copy.copy(os.environ)
-        # Prevent SG TK to try to bootstrap in the new process
         if "UE_SHOTGUN_BOOTSTRAP" in run_env:
             del run_env["UE_SHOTGUN_BOOTSTRAP"]
         if "UE_SHOTGRID_BOOTSTRAP" in run_env:
             del run_env["UE_SHOTGRID_BOOTSTRAP"]
         self.logger.info("Running %s" % cmd_args)
         subprocess.call(cmd_args, env=run_env)
-        return os.path.isfile(output_path), output_path
+
+        pattern = os.path.join(output_folder, movie_name + "*.exr")
+        frames = sorted([f for f in glob.glob(pattern) if os.path.isfile(f)])
+        return (len(frames) > 0), output_folder
