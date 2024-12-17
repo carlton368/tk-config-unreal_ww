@@ -24,11 +24,14 @@ _OS_LOCAL_STORAGE_PATH_FIELD = {
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
-print("PUBLISH_MOVIE LOADING")
-if 'WONJIN_PUBLISH_MOVIE' in os.environ:
-    os.environ['WONJIN_PUBLISH_MOVIE'] += os.pathsep + 'PUBLISH_MOVIE_LOADING'
-else:
-    os.environ['WONJIN_PUBLISH_MOVIE'] = 'PUBLISH_MOVIE_LOADING'
+# print("PUBLISH_MOVIE LOADING")
+# if 'WONJIN_PUBLISH_MOVIE' in os.environ:
+#     os.environ['WONJIN_PUBLISH_MOVIE'] += os.pathsep + 'PUBLISH_MOVIE_LOADING'
+# else:
+#     os.environ['WONJIN_PUBLISH_MOVIE'] = 'PUBLISH_MOVIE_LOADING'
+
+
+
 class UnrealMoviePublishPlugin(HookBaseClass):
     """
     Plugin for publishing an Unreal sequence as a rendered movie file.
@@ -287,6 +290,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             "accepted": accepted,
             "checked": checked
         }
+
     def validate(self, settings, item):
         asset_path = item.properties.get("asset_path")
         asset_name = item.properties.get("asset_name")

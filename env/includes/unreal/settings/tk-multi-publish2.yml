@@ -65,7 +65,7 @@ settings.tk-multi-publish2.maya.asset_step.unreal:
     settings:
         Publish Template: unreal.maya_asset_fbx_publish
   - name: Publish and Submit for Review
-    hook: "{self}/publish_file.py:{tk-framework-unrealqt_v1.x.x}/tk-multi-publish2/tk-maya/basic/publish_turntable.py"
+    hook: "{self}/publish_file.py:{config}/tk-multi-publish2/maya/publish_turntable.py"
     settings:
         Work Template: unreal.maya_turntable_render
         Publish Template: unreal.maya_turntable_publish
