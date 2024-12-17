@@ -995,10 +995,15 @@ class MayaUnrealTurntablePublishPlugin(HookBaseClass):
         base_temp_dir = None
         if sys.platform == "win32":
             base_temp_dir = r"C:\Temp"
+
             # Create C:\Temp folder if it does not exist
             if not os.path.exists(base_temp_dir):
-                os.makedirs(base_temp_dir)
-                self.logger.info("CTEMP"*20)
+                try:
+                    os.makedirs(base_temp_dir)
+                    self.logger.info("C:\Temp Directory was created")
+                except:
+                    self.loggef.info("You do not have write permission for C:\ path.")
+
         temp_folder = tempfile.mkdtemp(suffix="temp_unreal_shotgun", dir=base_temp_dir)
         # Store the temp folder path on the item for cleanup in finalize
         item.local_properties["temp_folder"] = temp_folder
