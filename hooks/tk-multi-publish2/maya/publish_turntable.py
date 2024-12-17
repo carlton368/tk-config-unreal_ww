@@ -1003,7 +1003,7 @@ class MayaUnrealTurntablePublishPlugin(HookBaseClass):
                     self.logger.info("C:\Temp Directory was created")
                 except Exception as e:
                     self.logger.error(f"You do not have write permission for C:\ path. : {e}")
-                    raise
+                    raise Exception("You do not have write permission for C:\ path.") from e
 
         temp_folder = tempfile.mkdtemp(suffix="temp_unreal_shotgun", dir=base_temp_dir)
         # Store the temp folder path on the item for cleanup in finalize
