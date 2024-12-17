@@ -791,7 +791,7 @@ class MayaUnrealTurntablePublishPlugin(HookBaseClass):
             # Build a name from the Maya scene
             base_name, _ = os.path.splitext(os.path.basename(path))
             if sys.platform == "win32":
-                base_name = "%s.avi" % base_name
+                base_name = "%s.mov" % base_name
             else:
                 base_name = "%s.mov" % base_name
             publish_path = os.path.join(movie_dir, base_name)
@@ -1154,7 +1154,7 @@ class MayaUnrealTurntablePublishPlugin(HookBaseClass):
             )
             # Workaround for Level Sequencer only rendering avi on Windows and Movie Queue rendering
             # mov on all platforms
-            publish_path = re.sub(r"\.avi$", ".mov", publish_path)
+            publish_path = re.sub(".mov", publish_path)
             item.local_properties["publish_path"] = publish_path
             self._unreal_render_movie_with_movie_render_queue(
                 unreal_exec_path,
