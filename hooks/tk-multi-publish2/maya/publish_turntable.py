@@ -1009,7 +1009,8 @@ class MayaUnrealTurntablePublishPlugin(HookBaseClass):
             temp_folder = tempfile.mkdtemp(suffix="temp_unreal_shotgun", dir=base_temp_dir)
         except Exception as e:
             self.logger.error(f"You do not have write permission for C:\ path. : {e}")
-            raise Exception("No write permission for C:\ path.") from e
+            raise Exception("No write permission for C:\ path.")
+
         # Store the temp folder path on the item for cleanup in finalize
         item.local_properties["temp_folder"] = temp_folder
         fbx_folder = temp_folder
