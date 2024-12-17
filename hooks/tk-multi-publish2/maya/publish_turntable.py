@@ -999,7 +999,7 @@ class MayaUnrealTurntablePublishPlugin(HookBaseClass):
             # Create C:\Temp folder if it does not exist
             if not os.path.exists(base_temp_dir):
                 try:
-                    os.makedirs(base_temp_dir)
+                    # os.makedirs(base_temp_dir)
                     self.logger.info("C:\Temp Directory was created")
                 except Exception as e:
                     self.logger.error(f"You do not have write permission for C:\ path. : {e}")
