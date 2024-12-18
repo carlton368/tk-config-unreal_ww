@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [![Build Status](https://dev.azure.com/shotgun-ecosystem/Toolkit/_apis/build/status/Configs/tk-config-default2?branchName=master)](https://dev.azure.com/shotgun-ecosystem/Toolkit/_build/latest?definitionId=49&branchName=master)
 
 -------------------------------------------------------------------------
@@ -40,3 +41,7 @@ The convention used so far when tagging releases for this config is `<Flow defau
 For example `v1.3.11-unreal.0.2.6`
 
 -------------------------------------------------------------------------
+=======
+# tk-config-ih
+# git push test
+>>>>>>> main

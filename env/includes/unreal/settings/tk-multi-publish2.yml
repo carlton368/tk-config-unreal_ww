@@ -10,11 +10,7 @@ includes:
 - ../../app_locations.yml
 
 settings.tk-multi-publish2.unreal.project:
-  collector: "{self}/collector.py:{config}/tk-multi-publish2/unreal/collector.py"
-  publish_plugins:
-  - name: Publish to ShotGrid
     hook: "{self}/publish_file.py"
-    settings: {}
   - name: Upload for review
     hook: "{self}/upload_version.py"
     settings: {}
@@ -22,11 +18,11 @@ settings.tk-multi-publish2.unreal.project:
     hook: "{self}/publish_file.py:{config}/tk-multi-publish2/unreal/publish_session.py"
     settings: {}
   - name: Export FBX and Publish to ShotGrid
-    hook: "{self}/publish_file.py:{config}/tk-multi-publish2/unreal/publish_asset.py"
+    hook: "{self}/unreal_publish_asset.py:{engine}/tk-multi-publish2/basic/publish_asset.py"
     settings:
         Publish Template: unreal.asset_publish
-  - name: Render MOV
-    hook: "{self}/publish_file.py:{config}/tk-multi-publish2/unreal/publish_movie.py"
+  - name: Render Movie and Submit for Review
+    hook: "{self}/publish_asset.py:{engine}/tk-multi-publish2/basic/publish_movie.py"
     settings:
       Publish Template: unreal.movie_publish_mov
       Render Format: mov 
